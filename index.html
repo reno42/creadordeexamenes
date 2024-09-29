@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generador de Exámenes Mejorado</title>
+
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+    <style>
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 12px;
+            height: 100%;
+            overflow: hidden;
+        }
+        .container {
+            display: flex;
+            height: 100%;
+        }
+        .left-column {
+            width: 40%;
+            padding: 20px;
+            box-sizing: border-box;
+            overflow-y: auto;
+        }
+        .right-column {
+            width: 60%;
+            padding: 20px;
+            box-sizing: border-box;
+            background-color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            overflow-y: auto;
+        }
+        #preview {
+            width: 210mm;
+            height: 297mm;
+            padding: 20mm;
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+        }
+        .question {
+            margin-bottom: 15px;
+        }
+        textarea, input[type="text"], select, button {
+            width: 100%;
+            margin-bottom: 10px;
+            font-family: 'Montserrat', sans-serif;
+            font-size: 12px;
+        }
+        #pdfButton {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: none;
+            border: none;
+            font-size: 24px;
+            cursor: pointer;
+        }
+        .match-item, .order-item {
+            display: flex;
+            margin-bottom: 5px;
+        }
+        .match-item input, .order-item input {
+            flex: 1;
+            margin-right: 5px;
+        }
+        .match-item .image-preview {
+            width: 40px;
+            height: 40px;
+            border: 1px solid #ccc;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            margin-right: 5px;
+        }
+        .match-item .image-preview img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .matching-question {
+            display: flex;
+            justify-content: space-between;
+        }
+        .matching-elements, .matching-matches {
+            width: 48%;
+        }
+        .matching-pair {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        .matching-image {
+            width: 30px;
+            height: 30px;
+            object-fit: contain;
+            margin-right: 5px;
+        }
+        .exam-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .logo {
+            width: 60px;
+            height: 60px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            background: transparent;
+        }
+        .logo img {
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+        .exam-title {
+            flex-grow: 1;
+            text-align: center;
+            font-size: 18px;
+            font-weight: bold;
+            margin: 0;
+        }
+        .student-info {
+            display: grid;
+            grid-template-columns: auto 1fr;
+            gap: 10px;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .student-info label {
+            font-weight: bold;
+        }
+        .instructions {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #f0f0f0;
+            border-radius: 5px;
+        }
+        #questions {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="left-column">
+            <h2>Configuración del Examen</h2>
+            <input type="file" id="logoUpload" accept="image/*" onchange="handleLogoUpload(event)">
+            <input type="text" id="examTitle" placeholder="Título del Examen">
+            <textarea id="instructions" rows="3" placeholder="Instrucciones del examen"></textarea>
+            <h2>Crear Pregunta</h2>
+            <select id="questionType" onchange="updateQuestionForm()">
+                <option value="multiple">Opción múltiple</option>
+                <option value="multiResponse">Respuesta múltiple</option>
+                <option value="trueFalse">Verdadero/Falso</option>
+                <option value="shortAnswer">Texto corto</option>
+                <option value="matching">Emparejamiento</option>
+                <option value="ordering">Ordenamiento</option>
+            </select>
+            <textarea id="questionText" rows="3" placeholder="Texto de la pregunta"></textarea>
+            <div id="optionsContainer"></div>
+            <button onclick="addQuestion()">Agregar Pregunta</button>
+        </div>
+        <div class="right-column">
+            <button id="pdfButton" onclick="generatePDF()">📄</button>
+            <div id="preview">
+                <div class="exam-header">
+                    <div class="logo" id="logoPreview"></div>
+                    <h1 class="exam-title" id="previewExamTitle">Título del Examen</h1>
+                </div>
+                <div class="student-info">
+                    <label>Nombre del Alumno:</label>
+                    <input type="text" readonly>
+                    <label>Fecha:</label>
+                    <input type="text" readonly>
+                    <label>Profesor:</label>
+                    <input type="text" readonly>
+                </div>
+                <div class="instructions" id="previewInstructions">
+                    Lee atentamente cada pregunta y demuestra tu conocimiento. ¡Es tu momento de brillar!
+                </div>
+                <div id="questions"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let questionCount = 0;
+
+        function handleLogoUpload(event) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    const logoPreview = document.getElementById('logoPreview');
+                    logoPreview.innerHTML = '';
+                    logoPreview.appendChild(img);
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function updateQuestionForm() {
+            const type = document.getElementById('questionType').value;
+            const container = document.getElementById('optionsContainer');
+            container.innerHTML = '';
+
+            switch(type) {
+                case 'multiple':
+                case 'multiResponse':
+                    for (let i = 1; i <= 5; i++) {
+                        container.innerHTML += `<input type="text" class="option" placeholder="Opción ${i}">`;
+                    }
+                    break;
+                case 'trueFalse':
+                    container.innerHTML = '<p>La respuesta será Verdadero o Falso</p>';
+                    break;
+                case 'shortAnswer':
+                    container.innerHTML = '<input type="text" id="answerField" placeholder="Respuesta correcta">';
+                    break;
+                case 'matching':
+                    for (let i = 1; i <= 4; i++) {
+                        container.innerHTML += `
+                            <div class="match-item">
+                                <div class="image-preview" id="imagePreview${i}"></div>
+                                <input type="file" class="match-left" accept="image/*" onchange="handleImageUpload(event, ${i})" placeholder="Elemento ${i}">
+                                <input type="text" class="match-right" placeholder="Coincidencia ${i}">
+                            </div>`;
+                    }
+                    break;
+                case 'ordering':
+                    for (let i = 1; i <= 5; i++) {
+                        container.innerHTML += `<input type="text" class="order-item" placeholder="Elemento ${i}">`;
+                    }
+                    break;
+            }
+        }
+
+        function handleImageUpload(event, index) {
+            const file = event.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    const img = document.createElement('img');
+                    img.src = e.target.result;
+                    const imagePreview = document.getElementById(`imagePreview${index}`);
+                    imagePreview.innerHTML = '';
+                    imagePreview.appendChild(img);
+                }
+                reader.readAsDataURL(file);
+            }
+        }
+
+        function addQuestion() {
+            if (questionCount >= 5) {
+                alert('Se ha alcanzado el límite máximo de 5 preguntas por examen.');
+                return;
+            }
+
+            const type = document.getElementById('questionType').value;
+            const text = document.getElementById('questionText').value;
+            const preview = document.getElementById('questions');
+            
+            questionCount++;
+            let questionHTML = `<div class="question"><p><strong>${questionCount}. ${text}</strong></p>`;
+            
+            switch(type) {
+                case 'multiple':
+                    questionHTML += getOptionsHTML('radio');
+                    break;
+                case 'multiResponse':
+                    questionHTML += getOptionsHTML('checkbox');
+                    break;
+                case 'trueFalse':
+                    questionHTML += `
+                        <input type="radio" name="q${questionCount}" value="true"> Verdadero
+                        <input type="radio" name="q${questionCount}" value="false"> Falso
+                    `;
+                    break;
+                case 'shortAnswer':
+                    questionHTML += `<input type="text" placeholder="Tu respuesta aquí">`;
+                    break;
+                case 'matching':
+                    questionHTML += getMatchingHTML();
+                    break;
+                case 'ordering':
+                    questionHTML += getOrderingHTML();
+                    break;
+            }
+            
+            questionHTML += '</div>';
+            preview.innerHTML += questionHTML;
+            
+            document.getElementById('questionText').value = '';
+            updateQuestionForm();
+        }
+
+        function getOptionsHTML(inputType) {
+            let html = '';
+            const options = document.getElementsByClassName('option');
+            for (let i = 0; i < options.length; i++) {
+                if (options[i].value.trim() !== '') {
+                    html += `<p><input type="${inputType}" name="q${questionCount}"> ${options[i].value}</p>`;
+                }
+            }
+            return html;
+        }
+
+        function getMatchingHTML() {
+            let html = '<div class="matching-question">';
+            let elements = '<div class="matching-elements">';
+            let matches = '<div class="matching-matches">';
+            const leftItems = document.getElementsByClassName('match-left');
+            const rightItems = document.getElementsByClassName('match-right');
+            for (let i = 0; i < leftItems.length; i++) {
+                const imagePreview = document.getElementById(`imagePreview${i+1}`);
+                if (imagePreview.firstChild && rightItems[i].value.trim() !== '') {
+                    elements += `
+                        <div class="matching-pair">
+                            <img src="${imagePreview.firstChild.src}" class="matching-image">
+                            <span>${String.fromCharCode(65 + i)})</span>
+                        </div>`;
+                    matches += `
+                        <div class="matching-pair">
+                            <span>${i + 1})</span>
+                            <span>${rightItems[i].value}</span>
+                        </div>`;
+                }
+            }
+            html += elements + '</div>' + matches + '</div></div>';
+            return html;
+        }
+
+        function getOrderingHTML() {
+            let html = '<ol>';
+            const items = document.getElementsByClassName('order-item');
+            for (let item of items) {
+                if (item.value.trim() !== '') {
+                    html += `<li>${item.value}</li>`;
+                }
+            }
+            html += '</ol>';
+            return html;
+        }
+
+        function generatePDF() {
+            const element = document.getElementById('preview');
+            const opt = {
+                margin: 0,
+                filename: 'examen.pdf',
+                image: { type: 'jpeg', quality: 0.98 },
+                html2canvas: { scale: 2, useCORS: true },
+                jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' }
+            };
+            html2pdf().set(opt).from(element).save();
+        }
+
+        updateQuestionForm();
+
+        document.getElementById('examTitle').addEventListener('input', function() {
+            document.getElementById('previewExamTitle').textContent = this.value || 'Título del Examen';
+        });
+
+        document.getElementById('instructions').addEventListener('input', function() {
+            const defaultInstructions = "Lee atentamente cada pregunta y demuestra tu conocimiento. ¡Es tu momento de brillar!";
+            document.getElementById('previewInstructions').textContent = this.value || defaultInstructions;
+        });
+
+        setInterval(function() {
+            const instructionsInput = document.getElementById('instructions');
+            const previewInstructions = document.getElementById('previewInstructions');
+            const defaultInstructions = "Lee atentamente cada pregunta y demuestra tu conocimiento. ¡Es tu momento de brillar!";
+            
+            if (instructionsInput.value.trim() === '') {
+                previewInstructions.textContent = defaultInstructions;
+            }
+        }, 100);
+    </script>
+</body>
+</html>
